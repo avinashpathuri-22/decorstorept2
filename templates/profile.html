@@ -6,15 +6,37 @@
         <h2 class="text-primary text-center">Your Profile</h2>
         <br>
         <div class="profile-info">
-            <p><strong>Full Name:</strong> {{ user.full_name }}</p>
-            <p><strong>Email Address:</strong> {{ user.email }}</p>
-            <hr>
-            <h3>Default Delivery Address</h3>
-            <p><strong>Address:</strong> {{ user.address or 'Not provided' }}</p>
-            <p><strong>City:</strong> {{ user.city or 'Not provided' }}</p>
-            <p><strong>Pincode:</strong> {{ user.pincode or 'Not provided' }}</p>
-            <br>
-            <p class="text-muted"><small>Joined on: {{ user.created_at.strftime('%Y-%m-%d') }}</small></p>
+            <form action="{{ url_for('profile') }}" method="POST" enctype="multipart/form-data">
+                <div style="text-align: center; margin-bottom: 2rem;">
+                    {% if user.profile_pic %}
+                        <img src="{{ user.profile_pic }}" alt="Profile Picture" style="width: 150px; height: 150px; border-radius: 50%; object-fit: cover; border: 3px solid var(--primary); margin-bottom: 1rem;">
+                    {% else %}
+                        <div style="width: 150px; height: 150px; border-radius: 50%; background: var(--glass-bg); border: 3px solid var(--primary); display: flex; align-items: center; justify-content: center; margin: 0 auto 1rem auto;">
+                            <span style="font-size: 3rem; color: var(--primary);">👤</span>
+                        </div>
+                    {% endif %}
+                    <br>
+                    <input type="file" name="profile_pic" accept="image/*" style="font-size: 0.9rem;">
+                </div>
+                
+                <p><strong>Full Name:</strong> {{ user.full_name }}</p>
+                <p><strong>Email Address:</strong> {{ user.email }}</p>
+                
+                <div style="margin: 1rem 0;">
+                    <label for="mobile"><strong>Mobile Number:</strong></label>
+                    <input type="text" id="mobile" name="mobile" value="{{ user.mobile or '' }}" placeholder="Enter mobile number" style="padding: 0.5rem; border-radius: 5px; border: 1px solid var(--glass-border); background: var(--glass-bg); color: var(--text); width: 100%; margin-top: 0.5rem;">
+                </div>
+
+                <hr>
+                <h3>Default Delivery Address</h3>
+                <p><strong>Address:</strong> {{ user.address or 'Not provided' }}</p>
+                <p><strong>City:</strong> {{ user.city or 'Not provided' }}</p>
+                <p><strong>Pincode:</strong> {{ user.pincode or 'Not provided' }}</p>
+                <br>
+                <p class="text-muted"><small>Joined on: {{ user.created_at.strftime('%Y-%m-%d') }}</small></p>
+                
+                <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 1rem;">Save Profile Settings</button>
+            </form>
         </div>
         <div class="profile-actions text-center" style="margin-top: 2rem;">
             <a href="{{ url_for('orders') }}" class="btn btn-primary">View My Orders</a>

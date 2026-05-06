@@ -1,8 +1,9 @@
 import os
+from werkzeug.utils import secure_filename
 from functools import wraps
-from flask import Flask, render_template, redirect, url_for, session, flash, request
+from flask import Flask, render_template, redirect, url_for, session, flash, request, jsonify
 from werkzeug.security import generate_password_hash, check_password_hash
-from models import db, Product, User, Order, OrderItem, CartItem
+from models import db, Product, User, Order, OrderItem, CartItem, Wishlist, Review
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'aviproject_secret_key_123!'
@@ -18,6 +19,19 @@ def login_required(f):
         if 'user_id' not in session:
             flash('Please log in to access this page.', 'warning')
             return redirect(url_for('login', next=request.url))
+        return f(*args, **kwargs)
+    return decorated_function
+
+def admin_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if 'user_id' not in session:
+            flash('Please log in as an administrator.', 'warning')
+            return redirect(url_for('admin_login', next=request.url))
+        user = User.query.get(session['user_id'])
+        if not user or not user.is_admin:
+            flash('You do not have permission to access this page.', 'danger')
+            return redirect(url_for('index'))
         return f(*args, **kwargs)
     return decorated_function
 
@@ -37,12 +51,14 @@ USE_S3 = os.environ.get('USE_S3', 'False').lower() in ['true', '1', 't']
 @app.context_processor
 def inject_globals():
     cart_count = 0
+    wishlist_count = 0
     current_user = None
     
     if 'user_id' in session:
         current_user = User.query.get(session['user_id'])
         if current_user:
             cart_count = sum(item.quantity for item in current_user.cart_items)
+            wishlist_count = len(current_user.wishlist_items)
     else:
         cart = session.get('cart', {})
         cart_count = sum(cart.values())
@@ -54,27 +70,64 @@ def inject_globals():
             return f"https://{BUCKET_NAME}.s3.amazonaws.com/{filename_encoded}"
         return image_path
         
-    return dict(cart_count=cart_count, current_user=current_user, get_image_url=get_image_url)
+    return dict(cart_count=cart_count, wishlist_count=wishlist_count, current_user=current_user, get_image_url=get_image_url)
 
 @app.route('/')
 def index():
     query = request.args.get('q', '')
-    max_price = request.args.get('max_price', type=float)
+    category = request.args.get('category', '')
     
     products_query = Product.query
     
     if query:
         products_query = products_query.filter(Product.name.ilike(f'%{query}%'))
-    if max_price:
-        products_query = products_query.filter(Product.price <= max_price)
+    if category:
+        products_query = products_query.filter(Product.category == category)
         
     products = products_query.all()
-    return render_template('index.html', products=products, search_query=query, max_price=max_price)
+    categories = [row[0] for row in db.session.query(Product.category).distinct().all() if row[0]]
+    return render_template('index.html', products=products, search_query=query, category=category, categories=categories)
+
+@app.route('/api/search')
+def api_search():
+    query = request.args.get('q', '')
+    category = request.args.get('category', '')
+    
+    products_query = Product.query
+    
+    if query:
+        products_query = products_query.filter(Product.name.ilike(f'%{query}%'))
+    if category:
+        products_query = products_query.filter(Product.category == category)
+        
+    products = products_query.all()
+    
+    results = []
+    for p in products:
+        # Determine image URL using global logic (or just direct property if we want to simplify, but let's use the same logic if possible or just image_url)
+        # S3 logic is used in templates via context processor. We'll reproduce it here for JSON.
+        img_url = p.image_url
+        if USE_S3:
+            import urllib.parse
+            filename = p.image_url.split('/')[-1]
+            filename_encoded = urllib.parse.quote(filename)
+            img_url = f"https://{BUCKET_NAME}.s3.amazonaws.com/{filename_encoded}"
+            
+        results.append({
+            'id': p.id,
+            'name': p.name,
+            'price': p.price,
+            'image_url': img_url,
+            'category': p.category
+        })
+        
+    return jsonify(results)
 
 @app.route('/product/<int:product_id>')
 def product(product_id):
     product = Product.query.get_or_404(product_id)
-    return render_template('product.html', product=product)
+    reviews = Review.query.filter_by(product_id=product.id).order_by(Review.created_at.desc()).all()
+    return render_template('product.html', product=product, reviews=reviews)
 
 @app.route('/register', methods=['GET', 'POST'])
 def register():
@@ -142,10 +195,31 @@ def logout():
     flash('You have been logged out.', 'info')
     return redirect(url_for('index'))
 
-@app.route('/profile')
+@app.route('/profile', methods=['GET', 'POST'])
 @login_required
 def profile():
     user = User.query.get(session['user_id'])
+    
+    if request.method == 'POST':
+        mobile = request.form.get('mobile')
+        if mobile is not None:
+            user.mobile = mobile
+            
+        profile_pic = request.files.get('profile_pic')
+        if profile_pic and profile_pic.filename:
+            filename = secure_filename(profile_pic.filename)
+            # Create directory if not exists
+            upload_folder = os.path.join(basedir, 'static', 'uploads', 'profile_pics')
+            os.makedirs(upload_folder, exist_ok=True)
+            
+            filepath = os.path.join(upload_folder, f"{user.id}_{filename}")
+            profile_pic.save(filepath)
+            user.profile_pic = f"/static/uploads/profile_pics/{user.id}_{filename}"
+            
+        db.session.commit()
+        flash('Profile updated successfully!', 'success')
+        return redirect(url_for('profile'))
+        
     return render_template('profile.html', user=user)
 
 @app.route('/cart')
@@ -296,11 +370,63 @@ def order_success(order_id):
     order = Order.query.filter_by(id=order_id, user_id=session['user_id']).first_or_404()
     return render_template('checkout.html', success=True, order=order)
 
-@app.route('/orders')
+@app.route('/my-orders', endpoint='orders')
 @login_required
 def orders():
     user_orders = Order.query.filter_by(user_id=session['user_id']).order_by(Order.created_at.desc()).all()
     return render_template('orders.html', orders=user_orders)
+
+@app.route('/wishlist')
+@login_required
+def wishlist():
+    user_id = session['user_id']
+    wishlist_items = Wishlist.query.filter_by(user_id=user_id).all()
+    products = [item.product for item in wishlist_items]
+    return render_template('wishlist.html', products=products)
+
+@app.route('/add-to-wishlist/<int:product_id>', methods=['POST'])
+@login_required
+def add_to_wishlist(product_id):
+    product = Product.query.get_or_404(product_id)
+    user_id = session['user_id']
+    
+    existing = Wishlist.query.filter_by(user_id=user_id, product_id=product_id).first()
+    if not existing:
+        new_item = Wishlist(user_id=user_id, product_id=product_id)
+        db.session.add(new_item)
+        db.session.commit()
+        flash(f'{product.name} added to your wishlist.', 'success')
+    else:
+        flash(f'{product.name} is already in your wishlist.', 'info')
+        
+    return redirect(request.referrer or url_for('index'))
+
+@app.route('/remove-from-wishlist/<int:product_id>', methods=['POST'])
+@login_required
+def remove_from_wishlist(product_id):
+    user_id = session['user_id']
+    Wishlist.query.filter_by(user_id=user_id, product_id=product_id).delete()
+    db.session.commit()
+    flash('Item removed from wishlist.', 'info')
+    return redirect(request.referrer or url_for('wishlist'))
+
+@app.route('/add-review/<int:product_id>', methods=['POST'])
+@login_required
+def add_review(product_id):
+    product = Product.query.get_or_404(product_id)
+    user_id = session['user_id']
+    rating = int(request.form.get('rating', 5))
+    comment = request.form.get('comment', '')
+    
+    if 1 <= rating <= 5 and comment.strip():
+        review = Review(user_id=user_id, product_id=product_id, rating=rating, comment=comment.strip())
+        db.session.add(review)
+        db.session.commit()
+        flash('Thank you for your review!', 'success')
+    else:
+        flash('Invalid review submission. Please provide a rating and a comment.', 'danger')
+        
+    return redirect(url_for('product', product_id=product_id))
 
 @app.route('/order/<int:order_id>')
 @login_required
@@ -308,21 +434,76 @@ def order_detail(order_id):
     order = Order.query.filter_by(id=order_id, user_id=session['user_id']).first_or_404()
     return render_template('order_detail.html', order=order)
 
-@app.route('/admin/update-order-status/<int:order_id>', methods=['GET', 'POST'])
-def update_order_status(order_id):
-    # Minimal check for "Admin" - to test this easily as per requirements. 
-    # Let's say user ID 1 is Admin, or we just allow anyone into this utility route.
-    order = Order.query.get_or_404(order_id)
+# ==========================================
+# ADMIN PORTAL
+# ==========================================
+
+@app.route('/admin/login', methods=['GET', 'POST'])
+def admin_login():
     if request.method == 'POST':
-        new_status = request.form.get('status')
-        if new_status:
-            order.status = new_status
-            db.session.commit()
-            flash(f'Order #{order.id} status updated to {new_status}.', 'success')
-        return redirect(url_for('update_order_status', order_id=order.id))
-    
-    statuses = ['Pending', 'Confirmed', 'Packed', 'Shipped', 'Out for Delivery', 'Delivered']
-    return render_template('admin_orders.html', order=order, statuses=statuses)
+        email = request.form.get('email')
+        password = request.form.get('password')
+        user = User.query.filter_by(email=email).first()
+        
+        if user and check_password_hash(user.password_hash, password) and user.is_admin:
+            session['user_id'] = user.id
+            flash(f'Welcome Admin, {user.full_name}!', 'success')
+            return redirect(url_for('admin_dashboard'))
+        else:
+            flash('Invalid admin credentials or insufficient permissions.', 'danger')
+            
+    return render_template('admin_login.html')
+
+@app.route('/admin/logout')
+def admin_logout():
+    session.pop('user_id', None)
+    flash('Admin logged out successfully.', 'info')
+    return redirect(url_for('admin_login'))
+
+@app.route('/admin')
+def admin_index():
+    return redirect(url_for('admin_dashboard'))
+
+@app.route('/admin/dashboard')
+@admin_required
+def admin_dashboard():
+    orders = Order.query.order_by(Order.created_at.desc()).all()
+    return render_template('admin_dashboard.html', orders=orders)
+
+@app.route('/admin/order/<int:order_id>')
+@admin_required
+def admin_order_detail(order_id):
+    order = Order.query.get_or_404(order_id)
+    statuses = ['Pending', 'Confirmed', 'Processing', 'Packed', 'Shipped', 'Out for Delivery', 'Delivered', 'Cancelled']
+    return render_template('admin_order.html', order=order, statuses=statuses)
+
+@app.route('/admin/order/<int:order_id>/status', methods=['POST'])
+@admin_required
+def admin_update_order_status(order_id):
+    order = Order.query.get_or_404(order_id)
+    new_status = request.form.get('status')
+    if new_status:
+        order.status = new_status
+        db.session.commit()
+        flash(f'Order #{order.id} status updated to {new_status}.', 'success')
+    return redirect(url_for('admin_order_detail', order_id=order.id))
+
+@app.route('/admin/order/<int:order_id>/delete', methods=['POST'])
+@admin_required
+def admin_delete_order(order_id):
+    order = Order.query.get_or_404(order_id)
+    # Delete associated order items first to maintain referential integrity
+    OrderItem.query.filter_by(order_id=order.id).delete()
+    db.session.delete(order)
+    db.session.commit()
+    flash(f'Order #{order.id} has been permanently deleted.', 'success')
+    return redirect(url_for('admin_dashboard'))
+
+@app.route('/admin/users')
+@admin_required
+def admin_users():
+    users = User.query.order_by(User.created_at.desc()).all()
+    return render_template('admin_users.html', users=users)
 
 if __name__ == '__main__':
     app.run(debug=True)

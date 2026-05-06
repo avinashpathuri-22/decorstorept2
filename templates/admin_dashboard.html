@@ -1,0 +1,42 @@
+{% extends 'admin_base.html' %}
+
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: center;">
+    <h2>Order Management</h2>
+</div>
+
+<div class="card">
+    {% if orders %}
+    <table>
+        <thead>
+            <tr>
+                <th>Order ID</th>
+                <th>Date</th>
+                <th>Customer</th>
+                <th>Total</th>
+                <th>Status</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for order in orders %}
+            <tr>
+                <td><strong>#{{ "%06d"|format(order.id) }}</strong></td>
+                <td>{{ order.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                <td>{{ order.user.full_name }}<br><small style="color: #666;">{{ order.user.email }}</small></td>
+                <td>₹{{ "%.2f"|format(order.total_amount) }}</td>
+                <td><span class="badge badge-{{ order.status }}">{{ order.status }}</span></td>
+                <td>
+                    <a href="{{ url_for('admin_order_detail', order_id=order.id) }}" class="btn btn-outline" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;">View / Manage</a>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <div style="text-align: center; padding: 2rem; color: #666;">
+        <p>No orders found in the system.</p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

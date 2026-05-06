@@ -19,6 +19,7 @@
                 {% if current_user %}
                     <a href="{{ url_for('profile') }}">Welcome, {{ current_user.full_name.split()[0] }}</a>
                     <a href="{{ url_for('orders') }}">My Orders</a>
+                    <a href="{{ url_for('wishlist') }}">Wishlist <span class="wishlist-count">{{ wishlist_count }}</span></a>
                     <a href="{{ url_for('logout') }}">Logout</a>
                 {% else %}
                     <a href="{{ url_for('login') }}">Login</a>

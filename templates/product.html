@@ -29,6 +29,83 @@
         {% else %}
         <button class="btn btn-disabled btn-large" disabled>Out of Stock</button>
         {% endif %}
+
+        {% if current_user %}
+        <form action="{{ url_for('add_to_wishlist', product_id=product.id) }}" method="POST" style="margin-top: 1rem;">
+            <button type="submit" class="btn btn-outline btn-large">❤️ Add to Wishlist</button>
+        </form>
+        {% endif %}
+    </div>
+</div>
+
+<div class="reviews-section" style="margin-top: 3rem; background: var(--glass-bg); border: 1px solid var(--glass-border); border-radius: 15px; padding: 2rem;">
+    <h3>Customer Reviews</h3>
+    
+    {% if current_user %}
+    <form action="{{ url_for('add_review', product_id=product.id) }}" method="POST" style="margin-bottom: 2rem;">
+        <div style="margin-bottom: 1rem;">
+            <label>Rating:</label>
+            <div class="star-rating" style="font-size: 2rem; cursor: pointer;">
+                <span class="star active" data-value="1">★</span>
+                <span class="star active" data-value="2">★</span>
+                <span class="star active" data-value="3">★</span>
+                <span class="star active" data-value="4">★</span>
+                <span class="star active" data-value="5">★</span>
+            </div>
+            <input type="hidden" id="rating-val" name="rating" value="5">
+        </div>
+        <div style="margin-bottom: 1rem;">
+            <label for="comment">Review:</label><br>
+            <textarea id="comment" name="comment" rows="4" required style="width: 100%; padding: 0.5rem; border-radius: 5px; border: 1px solid var(--glass-border); background: var(--glass-bg); color: var(--text);"></textarea>
+        </div>
+        <button type="submit" class="btn btn-primary">Submit Review</button>
+    </form>
+    
+    <style>
+    .star { color: #ccc; transition: color 0.2s; }
+    .star.active { color: var(--primary); }
+    </style>
+    <script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const stars = document.querySelectorAll('.star');
+        const ratingInput = document.getElementById('rating-val');
+        
+        stars.forEach(star => {
+            star.addEventListener('click', () => {
+                const val = parseInt(star.getAttribute('data-value'));
+                ratingInput.value = val;
+                stars.forEach(s => {
+                    if (parseInt(s.getAttribute('data-value')) <= val) {
+                        s.classList.add('active');
+                    } else {
+                        s.classList.remove('active');
+                    }
+                });
+            });
+        });
+    });
+    </script>
+    {% else %}
+    <p><a href="{{ url_for('login') }}">Log in</a> to write a review.</p>
+    {% endif %}
+
+    <div class="reviews-list">
+        {% if reviews %}
+            {% for review in reviews %}
+            <div class="review-item" style="border-bottom: 1px solid rgba(255,255,255,0.2); padding: 1rem 0;">
+                <div class="review-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                    <strong>{{ review.user.full_name }}</strong>
+                    <span class="stars" style="color: #ffd700;">
+                        {% for _ in range(review.rating) %}★{% endfor %}{% for _ in range(5 - review.rating) %}☆{% endfor %}
+                    </span>
+                </div>
+                <p style="margin: 0;">{{ review.comment }}</p>
+                <small style="color: #aaa;">{{ review.created_at.strftime('%Y-%m-%d') }}</small>
+            </div>
+            {% endfor %}
+        {% else %}
+            <p>No reviews yet. Be the first to review!</p>
+        {% endif %}
     </div>
 </div>
 {% endblock %}
