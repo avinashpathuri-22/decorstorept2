@@ -1,0 +1,59 @@
+{% extends 'admin_base.html' %}
+
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+    <h2>Add New Product</h2>
+    <a href="{{ url_for('admin_products') }}" class="btn btn-outline">&larr; Back to Products</a>
+</div>
+
+<div class="card" style="max-width: 800px; margin: 0 auto;">
+    <form action="{{ url_for('admin_add_product') }}" method="POST" enctype="multipart/form-data">
+        <div style="margin-bottom: 1rem;">
+            <label for="name" style="display: block; font-weight: bold; margin-bottom: 0.5rem;">Product Name *</label>
+            <input type="text" id="name" name="name" required style="width: 100%; padding: 0.75rem; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box;">
+        </div>
+
+        <div style="margin-bottom: 1rem;">
+            <label for="description" style="display: block; font-weight: bold; margin-bottom: 0.5rem;">Description *</label>
+            <textarea id="description" name="description" rows="4" required style="width: 100%; padding: 0.75rem; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; resize: vertical;"></textarea>
+        </div>
+
+        <div style="display: flex; gap: 1rem; margin-bottom: 1rem;">
+            <div style="flex: 1;">
+                <label for="price" style="display: block; font-weight: bold; margin-bottom: 0.5rem;">Price (₹) *</label>
+                <input type="number" id="price" name="price" step="0.01" min="0" required style="width: 100%; padding: 0.75rem; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box;">
+            </div>
+            <div style="flex: 1;">
+                <label for="stock" style="display: block; font-weight: bold; margin-bottom: 0.5rem;">Initial Stock *</label>
+                <input type="number" id="stock" name="stock" min="0" required style="width: 100%; padding: 0.75rem; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box;">
+            </div>
+        </div>
+
+        <div style="margin-bottom: 1rem;">
+            <label for="category" style="display: block; font-weight: bold; margin-bottom: 0.5rem;">Category</label>
+            <input type="text" id="category" name="category" placeholder="e.g., Wall Art, Lighting, Furniture" style="width: 100%; padding: 0.75rem; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box;">
+        </div>
+
+        <div style="margin-bottom: 2rem;">
+            <label style="display: block; font-weight: bold; margin-bottom: 0.5rem;">Product Image *</label>
+            <div style="padding: 1rem; border: 1px dashed #ccc; border-radius: 4px; background: #fafafa;">
+                <div style="margin-bottom: 1rem;">
+                    <label for="image" style="display: block; margin-bottom: 0.25rem;">Upload Image File:</label>
+                    <input type="file" id="image" name="image" accept="image/*">
+                </div>
+                <div style="text-align: center; color: #666; margin: 0.5rem 0;">OR</div>
+                <div>
+                    <label for="image_url" style="display: block; margin-bottom: 0.25rem;">Provide Image URL:</label>
+                    <input type="url" id="image_url" name="image_url" placeholder="https://..." style="width: 100%; padding: 0.5rem; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box;">
+                </div>
+                <small style="color: #666; display: block; margin-top: 0.5rem;">Please provide either an uploaded file or an image URL.</small>
+            </div>
+        </div>
+
+        <div style="text-align: right;">
+            <a href="{{ url_for('admin_products') }}" class="btn btn-outline" style="margin-right: 0.5rem;">Cancel</a>
+            <button type="submit" class="btn btn-primary" style="padding: 0.75rem 2rem; font-size: 1rem;">Save Product</button>
+        </div>
+    </form>
+</div>
+{% endblock %}

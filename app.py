@@ -505,5 +505,92 @@ def admin_users():
     users = User.query.order_by(User.created_at.desc()).all()
     return render_template('admin_users.html', users=users)
 
+@app.route('/admin/products')
+@admin_required
+def admin_products():
+    products = Product.query.order_by(Product.id.desc()).all()
+    return render_template('admin_products.html', products=products)
+
+@app.route('/admin/product/new', methods=['GET', 'POST'])
+@admin_required
+def admin_add_product():
+    if request.method == 'POST':
+        name = request.form.get('name')
+        description = request.form.get('description')
+        price = float(request.form.get('price', 0))
+        stock = int(request.form.get('stock', 0))
+        category = request.form.get('category')
+        
+        image = request.files.get('image')
+        image_url = ''
+        
+        if image and image.filename:
+            filename = secure_filename(image.filename)
+            upload_folder = os.path.join(basedir, 'static', 'uploads', 'products')
+            os.makedirs(upload_folder, exist_ok=True)
+            filepath = os.path.join(upload_folder, filename)
+            image.save(filepath)
+            image_url = f"/static/uploads/products/{filename}"
+        else:
+            image_url = request.form.get('image_url', '/static/images/default.png')
+
+        new_product = Product(
+            name=name,
+            description=description,
+            price=price,
+            stock=stock,
+            category=category,
+            image_url=image_url
+        )
+        db.session.add(new_product)
+        db.session.commit()
+        flash('Product added successfully!', 'success')
+        return redirect(url_for('admin_products'))
+        
+    return render_template('admin_add_product.html')
+
+@app.route('/admin/product/<int:product_id>/edit', methods=['GET', 'POST'])
+@admin_required
+def admin_edit_product(product_id):
+    product = Product.query.get_or_404(product_id)
+    
+    if request.method == 'POST':
+        product.name = request.form.get('name')
+        product.description = request.form.get('description')
+        product.price = float(request.form.get('price', product.price))
+        product.stock = int(request.form.get('stock', product.stock))
+        product.category = request.form.get('category')
+        
+        image = request.files.get('image')
+        if image and image.filename:
+            filename = secure_filename(image.filename)
+            upload_folder = os.path.join(basedir, 'static', 'uploads', 'products')
+            os.makedirs(upload_folder, exist_ok=True)
+            filepath = os.path.join(upload_folder, filename)
+            image.save(filepath)
+            product.image_url = f"/static/uploads/products/{filename}"
+        elif request.form.get('image_url') and request.form.get('image_url').strip():
+            product.image_url = request.form.get('image_url')
+
+        db.session.commit()
+        flash('Product updated successfully!', 'success')
+        return redirect(url_for('admin_products'))
+        
+    return render_template('admin_edit_product.html', product=product)
+
+@app.route('/admin/product/<int:product_id>/delete', methods=['POST'])
+@admin_required
+def admin_delete_product(product_id):
+    product = Product.query.get_or_404(product_id)
+    # Handle constraints: we might need to handle OrderItems, Reviews, CartItems, Wishlist before deleting
+    CartItem.query.filter_by(product_id=product.id).delete()
+    Wishlist.query.filter_by(product_id=product.id).delete()
+    Review.query.filter_by(product_id=product.id).delete()
+    
+    db.session.delete(product)
+    db.session.commit()
+    flash(f'Product {product.name} deleted.', 'success')
+    return redirect(url_for('admin_products'))
+
 if __name__ == '__main__':
     app.run(debug=True)
